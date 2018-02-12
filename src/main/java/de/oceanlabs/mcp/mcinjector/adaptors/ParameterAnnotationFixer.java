@@ -47,6 +47,8 @@ public class ParameterAnnotationFixer extends ClassVisitor {
                             } else {
                                 LOGGER.warning("Unexpected number of RuntimeVisibleParameterAnnotations in " + methodInfo + ": " + numVisible);
                             }
+                        } else {
+                            LOGGER.finer("    " + methodInfo + " does not have a RuntimeVisibleParameterAnnotations attribute");
                         }
                         if (mn.invisibleParameterAnnotations != null) {
                             int numInvisible = mn.invisibleParameterAnnotations.length;
@@ -58,6 +60,8 @@ public class ParameterAnnotationFixer extends ClassVisitor {
                             } else {
                                 LOGGER.warning("Unexpected number of RuntimeInvisibleParameterAnnotations in " + methodInfo + ": " + numInvisible);
                             }
+                        } else {
+                            LOGGER.finer("    " + methodInfo + " does not have a RuntimeInvisibleParameterAnnotations attribute");
                         }
                     } else {
                         LOGGER.warning("Unexpected lack of synthetic args to the constructor: expected "
