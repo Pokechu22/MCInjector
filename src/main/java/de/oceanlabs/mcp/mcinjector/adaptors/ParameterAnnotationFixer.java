@@ -88,7 +88,7 @@ public class ParameterAnnotationFixer extends ClassVisitor {
             LOGGER.fine("  Not considering " + cls.name + " for extra parameter annotations as it is not an inner class");
             return null; // It's not an inner class
         }
-        if ((cls.access & (ACC_STATIC | ACC_INTERFACE)) != 0) {
+        if ((info.access & (ACC_STATIC | ACC_INTERFACE)) != 0) {
             LOGGER.fine("  Not considering " + cls.name + " for extra parameter annotations as it has the wrong access " + cls.access);
             return null; // It's static or can't have a constructor
         }
