@@ -29,20 +29,20 @@ public class ParameterAnnotationFixer extends ClassVisitor {
         super.visitEnd();
 
         ClassNode cls = MCInjectorImpl.getClassNode(cv);
-        String outerName = isInnerClass(cls);
-        if (outerName != null) {
+        Type[] syntheticParams = canHaveShiftedParams(cls);
+        if (syntheticParams != null) {
             for (MethodNode mn : cls.methods) {
                 if (mn.name.equals("<init>")) {
                     // Found a constructor.
                     String methodInfo = mn.name + mn.desc + " in " + cls.name;
                     Type[] params = Type.getArgumentTypes(mn.desc);
-                    if (params.length > 0 && params[0].getSort() == Type.OBJECT && params[0].getInternalName().equals(outerName)) {
+                    if (startsMatch(params, syntheticParams)) {
                         if (mn.visibleParameterAnnotations != null) {
                             int numVisible = mn.visibleParameterAnnotations.length;
                             if (params.length == numVisible) {
-                                LOGGER.info("Found extra RuntimeVisibleParameterAnnotations entry in " + methodInfo);
-                                mn.visibleParameterAnnotations = Arrays.copyOfRange(mn.visibleParameterAnnotations, 1, numVisible);
-                            } else if (params.length == numVisible - 1){
+                                LOGGER.info("Found extra RuntimeVisibleParameterAnnotations entries in " + methodInfo + ": removing " + Arrays.toString(syntheticParams));
+                                mn.visibleParameterAnnotations = Arrays.copyOfRange(mn.visibleParameterAnnotations, syntheticParams.length, numVisible);
+                            } else if (params.length == numVisible - syntheticParams.length) {
                                 LOGGER.info("Number of RuntimeVisibleParameterAnnotations in " + methodInfo + " is already as we want");
                             } else {
                                 LOGGER.warning("Unexpected number of RuntimeVisibleParameterAnnotations in " + methodInfo + ": " + numVisible);
@@ -51,17 +51,17 @@ public class ParameterAnnotationFixer extends ClassVisitor {
                         if (mn.invisibleParameterAnnotations != null) {
                             int numInvisible = mn.invisibleParameterAnnotations.length;
                             if (params.length == numInvisible) {
-                                LOGGER.info("Found extra RuntimeInvisibleParameterAnnotations entry in " + methodInfo);
-                                mn.invisibleParameterAnnotations = Arrays.copyOfRange(mn.invisibleParameterAnnotations, 1, numInvisible);
-                            } else if (params.length == numInvisible - 1){
+                                LOGGER.info("Found extra RuntimeInvisibleParameterAnnotations entries in " + methodInfo + ": removing " + Arrays.toString(syntheticParams));
+                                mn.invisibleParameterAnnotations = Arrays.copyOfRange(mn.invisibleParameterAnnotations, syntheticParams.length, numInvisible);
+                            } else if (params.length == numInvisible - syntheticParams.length) {
                                 LOGGER.info("Number of RuntimeInvisibleParameterAnnotations in " + methodInfo + " is already as we want");
                             } else {
                                 LOGGER.warning("Unexpected number of RuntimeInvisibleParameterAnnotations in " + methodInfo + ": " + numInvisible);
                             }
                         }
                     } else {
-                        LOGGER.warning("Unexpected lack of synthetic arg to the constructor: expected "
-                                        + outerName + " on " + methodInfo);
+                        LOGGER.warning("Unexpected lack of synthetic args to the constructor: expected "
+                                        + Arrays.toString(syntheticParams) + " at the start of " + methodInfo);
                     }
                 }
             }
@@ -69,15 +69,29 @@ public class ParameterAnnotationFixer extends ClassVisitor {
     }
 
     /**
-     * Checks if the given class is an inner class, and thus the first
-     * parameter to the constructor is synthetic.
+     * Checks if the given class might have shifted parameter annotations in the
+     * constructor. There are two cases where this might happen:
+     * <ol>
+     * <li>If the given class is an inner class, the first parameter to the
+     * constructor is synthetic.</li>
+     * <li>if the given class is an enum, the first parameter is the enum
+     * constant name and the second parameter is its ordinal.</li>
+     * </ol>
      *
-     * Returns the name of the outer class if it is inner (and can have the param),
-     * and otherwise null.
+     * @return The types of the synthetic parameters if the class might have
+     *         shifted parameters, otherwise null.
      */
-    private String isInnerClass(ClassNode cls) {
+    private Type[] canHaveShiftedParams(ClassNode cls) {
+        // Check for enum
+        // http://hg.openjdk.java.net/jdk8/jdk8/langtools/file/1ff9d5118aae/src/share/classes/com/sun/tools/javac/comp/Lower.java#l2866
+        if ((cls.access & ACC_ENUM) != 0) {
+            LOGGER.fine("  Considering " + cls.name + " for extra parameter annotations as it is an enum");
+            return new Type[] { Type.getObjectType("java/lang/String"), Type.INT_TYPE };
+        }
+
+        // Check for inner class
         InnerClassNode info = null;
-        for (InnerClassNode node : cls.innerClasses) {
+        for (InnerClassNode node : cls.innerClasses) { // note: cls.innerClasses is never null
             if (node.name.equals(cls.name)) {
                 info = node;
                 break;
@@ -101,6 +115,18 @@ public class ParameterAnnotationFixer extends ClassVisitor {
 
         LOGGER.fine("  Considering " + cls.name + " for extra parameter annotations as it is an inner class of " + info.outerName);
 
-        return info.outerName;
+        return new Type[] { Type.getObjectType(info.outerName) };
+    }
+
+    private boolean startsMatch(Type[] values, Type[] prefix) {
+        if (values.length < prefix.length) {
+            return false;
+        }
+        for (int i = 0; i < prefix.length; i++) {
+            if (!values[i].equals(prefix[i])) {
+                return false;
+            }
+        }
+        return true;
     }
 }
